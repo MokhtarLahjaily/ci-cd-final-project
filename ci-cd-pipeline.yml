@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: ci-cd-pipeline
+  name: ci-cd-pipeline-fixed
 spec:
   params:
     - name: app-name
@@ -19,17 +19,19 @@ spec:
   workspaces:
     - name: output
   tasks:
-    # Task 1: Cleanup
+    # Task 1: Cleanup (regular Task)
     - name: cleanup
       taskRef:
+        kind: Task
         name: cleanup
       workspaces:
         - name: source
           workspace: output
     
-    # Task 2: Git Clone
+    # Task 2: Git Clone (ClusterTask)
     - name: git-clone
       taskRef:
+        kind: ClusterTask
         name: git-clone
       params:
         - name: url
@@ -42,7 +44,7 @@ spec:
       runAfter:
         - cleanup
     
-    # Task 3: Flake8 Linting (using Python image)
+    # Task 3: Flake8 Linting (inline task)
     - name: flake8-lint
       taskSpec:
         workspaces:
@@ -54,19 +56,23 @@ spec:
             script: |
               #!/bin/bash
               set -e
+              echo "Installing dependencies..."
               python -m pip install --upgrade pip
               pip install -r requirements.txt
+              echo "Running flake8 linting..."
               flake8 service --count --select=E9,F63,F7,F82 --show-source --statistics
               flake8 service --count --max-complexity=10 --max-line-length=127 --statistics
+              echo "Linting completed successfully!"
       workspaces:
         - name: source
           workspace: output
       runAfter:
         - git-clone
     
-    # Task 4: Nose Tests
+    # Task 4: Nose Tests (regular Task)
     - name: nose-tests
       taskRef:
+        kind: Task
         name: nose
       params:
         - name: args
@@ -77,9 +83,10 @@ spec:
       runAfter:
         - flake8-lint
     
-    # Task 5: Build Image
+    # Task 5: Build Image (ClusterTask)
     - name: build-image
       taskRef:
+        kind: ClusterTask
         name: buildah
       params:
         - name: IMAGE
@@ -92,13 +99,15 @@ spec:
       runAfter:
         - nose-tests
     
-    # Task 6: Deploy Application
+    # Task 6: Deploy Application (ClusterTask)
     - name: deploy-app
       taskRef:
+        kind: ClusterTask
         name: openshift-client
       params:
         - name: SCRIPT
           value: |
+            echo "Deploying application..."
             oc create deployment $(params.app-name) --image=$(params.build-image) --dry-run=client -o yaml | oc apply -f -
             oc expose deployment $(params.app-name) --port=8080 --target-port=8080
             oc expose service $(params.app-name)
