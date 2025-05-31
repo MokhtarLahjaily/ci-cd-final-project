@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: ci-cd-pipeline-fixed
+  name: ci-cd-pipeline
 spec:
   params:
     - name: app-name
